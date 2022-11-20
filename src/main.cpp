@@ -6,6 +6,7 @@
 #include "CliMode.h"
 #include "DHT.h"
 #include "Bitmap.h"
+#include "Cert.h"
 #include "Multichannel_Gas_GMXXX.h"
 #include <TFT_eSPI.h>
 #include <Wire.h>
@@ -23,34 +24,12 @@
 
 #define DHTPIN 0
 #define DHTTYPE DHT11
+
 LIS3DHTR<TwoWire> AccelSensor;
 GAS_GMXXX<TwoWire> gas;
 DHT dht(DHTPIN, DHTTYPE);
 TFT_eSPI tft;
 TFT_eSprite spr = TFT_eSprite(&tft);  //sprite
-
-const char* ROOT_CA_BALTIMORE =
-"-----BEGIN CERTIFICATE-----\n"
-"MIIDdzCCAl+gAwIBAgIEAgAAuTANBgkqhkiG9w0BAQUFADBaMQswCQYDVQQGEwJJ\n"
-"RTESMBAGA1UEChMJQmFsdGltb3JlMRMwEQYDVQQLEwpDeWJlclRydXN0MSIwIAYD\n"
-"VQQDExlCYWx0aW1vcmUgQ3liZXJUcnVzdCBSb290MB4XDTAwMDUxMjE4NDYwMFoX\n"
-"DTI1MDUxMjIzNTkwMFowWjELMAkGA1UEBhMCSUUxEjAQBgNVBAoTCUJhbHRpbW9y\n"
-"ZTETMBEGA1UECxMKQ3liZXJUcnVzdDEiMCAGA1UEAxMZQmFsdGltb3JlIEN5YmVy\n"
-"VHJ1c3QgUm9vdDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAKMEuyKr\n"
-"mD1X6CZymrV51Cni4eiVgLGw41uOKymaZN+hXe2wCQVt2yguzmKiYv60iNoS6zjr\n"
-"IZ3AQSsBUnuId9Mcj8e6uYi1agnnc+gRQKfRzMpijS3ljwumUNKoUMMo6vWrJYeK\n"
-"mpYcqWe4PwzV9/lSEy/CG9VwcPCPwBLKBsua4dnKM3p31vjsufFoREJIE9LAwqSu\n"
-"XmD+tqYF/LTdB1kC1FkYmGP1pWPgkAx9XbIGevOF6uvUA65ehD5f/xXtabz5OTZy\n"
-"dc93Uk3zyZAsuT3lySNTPx8kmCFcB5kpvcY67Oduhjprl3RjM71oGDHweI12v/ye\n"
-"jl0qhqdNkNwnGjkCAwEAAaNFMEMwHQYDVR0OBBYEFOWdWTCCR1jMrPoIVDaGezq1\n"
-"BE3wMBIGA1UdEwEB/wQIMAYBAf8CAQMwDgYDVR0PAQH/BAQDAgEGMA0GCSqGSIb3\n"
-"DQEBBQUAA4IBAQCFDF2O5G9RaEIFoN27TyclhAO992T9Ldcw46QQF+vaKSm2eT92\n"
-"9hkTI7gQCvlYpNRhcL0EYWoSihfVCr3FvDB81ukMJY2GQE/szKN+OMY3EU/t3Wgx\n"
-"jkzSswF07r51XgdIGn9w/xZchMB5hbgF/X++ZRGjD8ACtPhSNzkE1akxehi/oCr0\n"
-"Epn3o0WC4zxe9Z2etciefC7IpJ5OCBRLbf1wbWsaY71k5h+3zvDyny67G7fyUIhz\n"
-"ksLi4xaNmjICq44Y3ekQEe5+NauQrz4wlHrQMz2nZQ/1/I6eYs9HRCwBXbsdtTLS\n"
-"R9I4LtD+gdwyah617jzV/OeBHRnDJELqYzmp\n"
-"-----END CERTIFICATE-----";
 
 WiFiClientSecure wifi_client;
 PubSubClient mqtt_client(wifi_client);
@@ -109,10 +88,6 @@ static void Log(const char* format, ...)
 ////////////////////////////////////////////////////////////////////////////////
 // Display
 
-//#include <LovyanGFX.hpp>
-
-//static LGFX tft;
-
 static void DisplayPrintf(const char* format, ...)
 {
     va_list arg;
@@ -154,9 +129,11 @@ static void ButtonEventHandler(AceButton* button, uint8_t eventType, uint8_t but
             DisplayPrintf("Right button was clicked");
             break;
         case ButtonId::CENTER:
+            digitalWrite(LCD_BACKLIGHT, HIGH);
             DisplayPrintf("Center button was clicked");
             break;
         case ButtonId::LEFT:
+            digitalWrite(LCD_BACKLIGHT, LOW);
             DisplayPrintf("Left button was clicked");
             break;
         }
@@ -330,6 +307,63 @@ static int ConnectToHub(az_iot_hub_client* iot_hub_client, const std::string& ho
     return 0;
 }
 
+static void DisplayTelemetry(float voc, float co, float no2, float c2h5ch, float t, float h) {
+
+    //digitalWrite(LCD_BACKLIGHT, LOW);
+
+    // display voc
+    spr.createSprite(40, 30);
+    spr.fillSprite(TFT_BLACK);
+    spr.setFreeFont(&FreeSansBoldOblique12pt7b);
+    spr.setTextColor(TFT_WHITE);
+    spr.drawFloat(voc, 0, 0, 1);
+    spr.pushSprite(15, 100);
+    spr.deleteSprite();
+
+    // display co
+    spr.createSprite(40, 30);
+    spr.setFreeFont(&FreeSansBoldOblique12pt7b);
+    spr.setTextColor(TFT_WHITE);
+    spr.drawFloat(co, 0, 0, 1);
+    spr.setTextColor(TFT_GREEN);
+    spr.pushSprite(15, 185);
+    spr.deleteSprite();
+
+    // display temperature
+    spr.createSprite(30, 30);
+    spr.setFreeFont(&FreeSansBoldOblique12pt7b);
+    spr.setTextColor(TFT_WHITE);
+    spr.drawFloat(t, 0, 0, 1);
+    spr.setTextColor(TFT_GREEN);
+    spr.pushSprite((tft.width() / 2) - 1, 100);
+    spr.deleteSprite();
+
+    // display no2
+    spr.createSprite(45, 30);
+    spr.setFreeFont(&FreeSansBoldOblique12pt7b);
+    spr.setTextColor(TFT_WHITE);
+    spr.drawFloat(no2, 0, 0, 1);
+    spr.pushSprite(((tft.width() / 2) + (tft.width() / 2) / 2), 97);
+    spr.deleteSprite();
+
+    // display humidity
+    spr.createSprite(30, 30);
+    spr.setFreeFont(&FreeSansBoldOblique12pt7b);
+    spr.setTextColor(TFT_WHITE);
+    spr.drawNumber(h, 0, 0, 1);
+    spr.pushSprite((tft.width() / 2) - 1, (tft.height() / 2) + 67);
+    spr.deleteSprite();
+
+    // display c2h5ch
+    spr.createSprite(45, 30);
+    spr.setFreeFont(&FreeSansBoldOblique12pt7b);
+    spr.setTextColor(TFT_WHITE);
+    spr.drawFloat(c2h5ch, 0 , 0, 1);
+    spr.pushSprite(((tft.width() / 2) + (tft.width() / 2) / 2), (tft.height() / 2) + 67);
+    spr.deleteSprite();
+
+}
+
 static az_result SendTelemetry()
 {
     float accelX, accelY, accelZ;
@@ -338,7 +372,7 @@ static az_result SendTelemetry()
     uint32_t val = 0;
     float no2, c2h5ch, voc, co;
     int light;
-    int temperature;
+    float temperature;
     
     light = analogRead(WIO_LIGHT) * 100 / 1023;
 
@@ -348,67 +382,28 @@ static az_result SendTelemetry()
     val = gas.getGM502B();
     if (val > 999) val = 999;
     voc = gas.calcVol(val);    
-    spr.createSprite(40, 30);
-    spr.fillSprite(TFT_BLACK);
-    spr.setFreeFont(&FreeSansBoldOblique12pt7b);
-    spr.setTextColor(TFT_WHITE);
-    spr.drawFloat(voc, 0, 0, 1);
-    spr.pushSprite(15, 100);
-    spr.deleteSprite();
 
     // CO
     val = gas.getGM702B();
     if (val > 999) val = 999;
     co = gas.calcVol(val);
-    spr.createSprite(40, 30);
-    spr.setFreeFont(&FreeSansBoldOblique12pt7b);
-    spr.setTextColor(TFT_WHITE);
-    spr.drawFloat(co, 0, 0, 1);
-    spr.setTextColor(TFT_GREEN);
-    spr.pushSprite(15, 185);
-    spr.deleteSprite();
 
     // Temperature
     temperature = dht.readTemperature();
-    spr.createSprite(30, 30);
-    spr.setFreeFont(&FreeSansBoldOblique12pt7b);
-    spr.setTextColor(TFT_WHITE);
-    spr.drawFloat(temperature, 0, 0, 1);
-    spr.setTextColor(TFT_GREEN);
-    spr.pushSprite((tft.width() / 2) - 1, 100);
-    spr.deleteSprite();
 
     // NO2
     val = gas.getGM102B();
     if (val > 999) val = 999;
     no2 = gas.calcVol(val);
-    spr.createSprite(45, 30);
-    spr.setFreeFont(&FreeSansBoldOblique12pt7b);
-    spr.setTextColor(TFT_WHITE);
-    spr.drawFloat(no2, 0, 0, 1);
-    spr.pushSprite(((tft.width() / 2) + (tft.width() / 2) / 2), 97);
-    spr.deleteSprite();
 
     // Humidity
     humidity = dht.readHumidity();
-    if (humidity > 99) humidity = 99;
-    spr.createSprite(30, 30);
-    spr.setFreeFont(&FreeSansBoldOblique12pt7b);
-    spr.setTextColor(TFT_WHITE);
-    spr.drawNumber(humidity, 0, 0, 1);
-    spr.pushSprite((tft.width() / 2) - 1, (tft.height() / 2) + 67);
-    spr.deleteSprite();
+    if (humidity > 99.9) humidity = 99.9;
 
     // Ethyl
     val = gas.getGM302B();
     if (val > 999) val = 999;
     c2h5ch = gas.calcVol(val);
-    spr.createSprite(45, 30);
-    spr.setFreeFont(&FreeSansBoldOblique12pt7b);
-    spr.setTextColor(TFT_WHITE);
-    spr.drawFloat(c2h5ch, 0 , 0, 1);
-    spr.pushSprite(((tft.width() / 2) + (tft.width() / 2) / 2), (tft.height() / 2) + 67);
-    spr.deleteSprite();
 
 
     char creationTime[20 + 1];  // yyyy-mm-ddThh:mm:ss.sssZ
@@ -482,8 +477,11 @@ static az_result SendTelemetry()
         DisplayPrintf("Sent telemetry %d", sendCount);
     }
 
+    DisplayTelemetry(voc, co, no2, c2h5ch, temperature, humidity); // display values
     return AZ_OK;
 }
+
+
 
 static az_result SendButtonTelemetry(ButtonId id)
 {
@@ -741,21 +739,15 @@ void setup()
     pinMode(WIO_BUZZER, OUTPUT);
 
     ////////////////////
-    // Init display
+    // Display Logo
 
     tft.begin();
+    tft.setRotation(3);
     tft.fillScreen(TFT_WHITE);
     tft.pushImage((tft.width() - SeeedstudioBitmapWidth) / 2, (tft.height() - SeeedstudioBitmapHeight) / 2, SeeedstudioBitmapWidth, SeeedstudioBitmapHeight, SeeedstudioBitmap);
     delay(2000);
 
     setup_display();
-
-/*
-    tft.fillScreen(TFT_BLACK);
-    tft.setTextScroll(true);
-    tft.setTextColor(TFT_WHITE);
-    tft.setFont(&fonts::Font2);
-*/
 
     ////////////////////
     // Enter configuration mode
